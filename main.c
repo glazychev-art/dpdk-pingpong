@@ -438,6 +438,8 @@ pong_main_loop(void)
             }
         }
     }
+    /* print port statistics when pong main loop finishes */
+    print_port_statistics();
 }
 
 static int
@@ -517,6 +519,19 @@ int main(int argc, char **argv)
     if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE)
         local_port_conf.txmode.offloads |=
             DEV_TX_OFFLOAD_MBUF_FAST_FREE;
+
+    if (server_mode)
+    {
+        ret = rte_eth_dev_default_mac_addr_set(portid, &server_ether_addr);
+    }
+    else
+    {
+        ret = rte_eth_dev_default_mac_addr_set(portid, &client_ether_addr);
+    }
+
+    if (ret < 0)
+        rte_exit(EXIT_FAILURE, "Cannot set device MAC address: err=%d, port=%u\n",
+                 ret, portid);
 
     ret = rte_eth_dev_configure(portid, 1, 1, &local_port_conf);
     if (ret < 0)
