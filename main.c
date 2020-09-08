@@ -17,14 +17,14 @@
 uint32_t PINGPONG_LOG_LEVEL = RTE_LOG_DEBUG;
 
 /* the client side */
-static struct ether_addr client_ether_addr =
-    {{0x52, 0x54, 0x00, 0xf9, 0xfc, 0x4d}};
-static uint32_t client_ip_addr = IPv4(172, 16, 166, 131);
+static struct rte_ether_addr client_ether_addr =
+    {{0xca, 0x95, 0xbb, 0x75, 0xcb, 0xdc}};
+static uint32_t client_ip_addr = RTE_IPV4(10, 32, 2, 129);
 
 /* the server side */
-static struct ether_addr server_ether_addr =
-    {{0x52, 0x54, 0x00, 0x22, 0xb0, 0x7c}};
-static uint32_t server_ip_addr = IPv4(172, 16, 166, 132);
+static struct rte_ether_addr server_ether_addr =
+    {{0x1e, 0x55, 0x34, 0x50, 0xca, 0xf7}};
+static uint32_t server_ip_addr = RTE_IPV4(10, 32, 2, 129);
 
 static uint16_t cfg_udp_src = 1000;
 static uint16_t cfg_udp_dst = 1001;
@@ -143,7 +143,7 @@ ip_format_addr(char *buf, uint16_t size,
 static inline uint32_t
 reverse_ip_addr(const uint32_t ip_addr)
 {
-    return IPv4((uint8_t)(ip_addr & 0xff),
+    return RTE_IPV4((uint8_t)(ip_addr & 0xff),
                 (uint8_t)((ip_addr >> 8) & 0xff),
                 (uint8_t)((ip_addr >> 16) & 0xff),
                 (uint8_t)((ip_addr >> 24) & 0xff));
@@ -233,9 +233,9 @@ contruct_ping_packet(void)
 {
     unsigned pkt_size = 1000U;
     struct rte_mbuf *pkt;
-    struct ether_hdr *eth_hdr;
-    struct ipv4_hdr *ip_hdr;
-    struct udp_hdr *udp_hdr;
+    struct rte_ether_hdr *eth_hdr;
+    struct rte_ipv4_hdr *ip_hdr;
+    struct rte_udp_hdr *udp_hdr;
 
     pkt = rte_pktmbuf_alloc(pingpong_pktmbuf_pool);
     if (!pkt)
@@ -245,13 +245,13 @@ contruct_ping_packet(void)
     pkt->next = NULL;
 
     /* Initialize Ethernet header. */
-    eth_hdr = rte_pktmbuf_mtod(pkt, struct ether_hdr *);
-    ether_addr_copy(&server_ether_addr, &eth_hdr->d_addr);
-    ether_addr_copy(&client_ether_addr, &eth_hdr->s_addr);
-    eth_hdr->ether_type = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
+    eth_hdr = rte_pktmbuf_mtod(pkt, struct rte_ether_hdr *);
+    rte_ether_addr_copy(&server_ether_addr, &eth_hdr->d_addr);
+    rte_ether_addr_copy(&client_ether_addr, &eth_hdr->s_addr);
+    eth_hdr->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
 
     /* Initialize IP header. */
-    ip_hdr = (struct ipv4_hdr *)(eth_hdr + 1);
+    ip_hdr = (struct rte_ipv4_hdr *)(eth_hdr + 1);
     memset(ip_hdr, 0, sizeof(*ip_hdr));
     ip_hdr->version_ihl = IP_VHL_DEF;
     ip_hdr->type_of_service = 0;
@@ -267,7 +267,7 @@ contruct_ping_packet(void)
                                   sizeof(*ip_hdr));
 
     /* Initialize UDP header. */
-    udp_hdr = (struct udp_hdr *)(ip_hdr + 1);
+    udp_hdr = (struct rte_udp_hdr *)(ip_hdr + 1);
     udp_hdr->src_port = rte_cpu_to_be_16(cfg_udp_src);
     udp_hdr->dst_port = rte_cpu_to_be_16(cfg_udp_dst);
     udp_hdr->dgram_cksum = 0; /* No UDP checksum. */
@@ -276,9 +276,9 @@ contruct_ping_packet(void)
                                           sizeof(*ip_hdr));
     pkt->nb_segs = 1;
     pkt->pkt_len = pkt_size;
-    pkt->l2_len = sizeof(struct ether_hdr);
-    pkt->l3_len = sizeof(struct ipv4_hdr);
-    pkt->l4_len = sizeof(struct udp_hdr);
+    pkt->l2_len = sizeof(struct rte_ether_hdr);
+    pkt->l3_len = sizeof(struct rte_ipv4_hdr);
+    pkt->l4_len = sizeof(struct rte_udp_hdr);
 
     return pkt;
 }
@@ -294,9 +294,9 @@ ping_main_loop(void)
     uint64_t pkt_idx = 0;
     struct rte_mbuf *pkts_burst[MAX_PKT_BURST];
     struct rte_mbuf *m = NULL;
-    struct ether_hdr *eth_hdr;
-    struct vlan_hdr *vlan_hdr;
-    struct ipv4_hdr *ip_hdr;
+    struct rte_ether_hdr *eth_hdr;
+    struct rte_vlan_hdr *vlan_hdr;
+    struct rte_ipv4_hdr *ip_hdr;
     uint16_t eth_type;
     int l2_len;
     bool received_pong = false;
@@ -335,28 +335,28 @@ ping_main_loop(void)
                 {
                     m = pkts_burst[i];
 
-                    eth_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
+                    eth_hdr = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
                     eth_type = rte_cpu_to_be_16(eth_hdr->ether_type);
-                    l2_len = sizeof(struct ether_hdr);
-                    if (eth_type == ETHER_TYPE_VLAN)
+                    l2_len = sizeof(struct rte_ether_hdr);
+                    if (eth_type == RTE_ETHER_TYPE_VLAN)
                     {
-                        vlan_hdr = (struct vlan_hdr *)((char *)eth_hdr + sizeof(struct ether_hdr));
-                        l2_len += sizeof(struct vlan_hdr);
+                        vlan_hdr = (struct rte_vlan_hdr *)((char *)eth_hdr + sizeof(struct rte_ether_hdr));
+                        l2_len += sizeof(struct rte_vlan_hdr);
                         eth_type = rte_be_to_cpu_16(vlan_hdr->eth_proto);
                     }
-                    if (eth_type == ETHER_TYPE_IPv4)
+                    if (eth_type == RTE_ETHER_TYPE_IPV4)
                     {
-                        ip_hdr = (struct ipv4_hdr *)((char *)eth_hdr + l2_len);
+                        ip_hdr = (struct rte_ipv4_hdr *)((char *)eth_hdr + l2_len);
                         /* compare mac & ip, confirm it is a pong packet */
-                        if (is_same_ether_addr(&eth_hdr->d_addr, &client_ether_addr) &&
+                        if (rte_is_same_ether_addr(&eth_hdr->d_addr, &client_ether_addr) &&
                             reverse_ip_addr(ip_hdr->dst_addr) == client_ip_addr)
                         {
                             diff_tsc = pong_tsc - ping_tsc;
                             rtt_us = diff_tsc * US_PER_S / tsc_hz;
                             port_statistics.rtt[port_statistics.rx] = rtt_us;
 
-                            ether_addr_copy(&client_ether_addr, &eth_hdr->s_addr);
-                            ether_addr_copy(&server_ether_addr, &eth_hdr->d_addr);
+                            rte_ether_addr_copy(&client_ether_addr, &eth_hdr->s_addr);
+                            rte_ether_addr_copy(&server_ether_addr, &eth_hdr->d_addr);
 
                             ip_hdr->src_addr = rte_cpu_to_be_32(client_ip_addr);
                             ip_hdr->dst_addr = rte_cpu_to_be_32(server_ip_addr);
@@ -384,9 +384,9 @@ pong_main_loop(void)
     unsigned i, nb_rx, nb_tx;
     struct rte_mbuf *pkts_burst[MAX_PKT_BURST];
     struct rte_mbuf *m = NULL;
-    struct ether_hdr *eth_hdr;
-    struct vlan_hdr *vlan_hdr;
-    struct ipv4_hdr *ip_hdr;
+    struct rte_ether_hdr *eth_hdr;
+    struct rte_vlan_hdr *vlan_hdr;
+    struct rte_ipv4_hdr *ip_hdr;
     uint16_t eth_type;
     int l2_len;
 
@@ -406,26 +406,26 @@ pong_main_loop(void)
 
                 m = pkts_burst[i];
 
-                eth_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
+                eth_hdr = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
                 eth_type = rte_cpu_to_be_16(eth_hdr->ether_type);
-                l2_len = sizeof(struct ether_hdr);
-                if (eth_type == ETHER_TYPE_VLAN)
+                l2_len = sizeof(struct rte_ether_hdr);
+                if (eth_type == RTE_ETHER_TYPE_VLAN)
                 {
-                    vlan_hdr = (struct vlan_hdr *)((char *)eth_hdr + sizeof(struct ether_hdr));
-                    l2_len += sizeof(struct vlan_hdr);
+                    vlan_hdr = (struct rte_vlan_hdr *)((char *)eth_hdr + sizeof(struct rte_ether_hdr));
+                    l2_len += sizeof(struct rte_vlan_hdr);
                     eth_type = rte_be_to_cpu_16(vlan_hdr->eth_proto);
                 }
-                if (eth_type == ETHER_TYPE_IPv4)
+                if (eth_type == RTE_ETHER_TYPE_IPV4)
                 {
-                    ip_hdr = (struct ipv4_hdr *)((char *)eth_hdr + l2_len);
+                    ip_hdr = (struct rte_ipv4_hdr *)((char *)eth_hdr + l2_len);
                     /* compare mac & ip, confirm it is a ping packet */
-                    if (is_same_ether_addr(&eth_hdr->d_addr, &server_ether_addr) &&
+                    if (rte_is_same_ether_addr(&eth_hdr->d_addr, &server_ether_addr) &&
                         (reverse_ip_addr(ip_hdr->dst_addr) == server_ip_addr))
                     {
                         port_statistics.rx += 1;
                         /* do pong */
-                        ether_addr_copy(&server_ether_addr, &eth_hdr->s_addr);
-                        ether_addr_copy(&client_ether_addr, &eth_hdr->d_addr);
+                        rte_ether_addr_copy(&server_ether_addr, &eth_hdr->s_addr);
+                        rte_ether_addr_copy(&client_ether_addr, &eth_hdr->d_addr);
 
                         ip_hdr->src_addr = rte_cpu_to_be_32(server_ip_addr);
                         ip_hdr->dst_addr = rte_cpu_to_be_32(client_ip_addr);
