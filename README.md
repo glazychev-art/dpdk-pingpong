@@ -5,11 +5,11 @@ A simple program to evaluate raw DPDK latency.
 The client sends a packet to server as a `ping`, then the server returns it back to client as a `pong`. 
 The client records such ping-pong round trip time.
 
-`Note` that the following steps have been evaluated on 2 Ubuntu 18.04 virtual machines (KVM) with DPDK 19.05. 
+`Note` that the following steps have been evaluated on 2 Ubuntu 20.04 virtual machines (KVM) with DPDK 20.08. 
 
 ## Prepare
 
-The following operations are tested on Ubuntu 18.04.4 with DPDK 19.11.1.
+The following operations are tested on Ubuntu 20.04 with DPDK 20.08.
 
 ### Setup DPDK
 
@@ -61,46 +61,31 @@ cd $RTE_SDK/usertools
 
 ## Build
 
-1. Modify the MAC and IP addresses
-
-Since the ARP protocol is not implemented, the MAC and IP addresses of the client and server are hardcoded.
-Modify the follwing variables.
-```c
-/* the client side */
-static struct ether_addr client_ether_addr =
-    {{0x00, 0x0c, 0x29, 0xd5, 0xac, 0xc9}};
-static uint32_t client_ip_addr = IPv4(172, 16, 166, 131);
-
-/* the server side */
-static struct ether_addr server_ether_addr =
-    {{0x00, 0x0c, 0x29, 0xd1, 0xdc, 0x50}};
-static uint32_t server_ip_addr = IPv4(172, 16, 166, 132);
-```
-
-2. Build
-
 ```shell
-export RTE_SDK=/path/to/dpdk-19.05/
+export RTE_SDK=/path/to/dpdk-20.08/
 export RTE_TARGET=build
 make
 ```
 
 The valid parameters are: 
 `-p` to specify the id of  which port to use, 0 by default (both sides), 
-`-n` to customize how many ping-pong rounds, 100 by default (client side), 
-`-s` to enable server mode (server side).
+`-n` to customize how many ping-pong rounds, 100 by default (both sides), 
+`-s` to enable server mode (server side),
+`-c` to enable client mode (client side),
+`-S` to set server MAC address (both sides),
+`-C` to set client MAC address (client side),
 
 ## Run
 1. Make sure that NIC is properly binded to the DPDK-compible driver and huge memory page is configured on both client and server.
 
 2. On the server side
 ```shell
-sudo ./build/pingpong -l 1,2 -- -p 0 -s
+sudo ./build/pingpong -l 1,2 -- -p 0 -s -n 100 -S 0a:11:22:33:44:55
 ```
 
 3. On the client side
 ```shell
-sudo ./build/pingpong -l 1,2 -- -p 0 -n 200
+sudo ./build/pingpong -l 1,2 -- -p 0 -c -n 200 -C 0a:55:44:33:22:11 -S 0a:11:22:33:44:55
 ```
 
 `Note` that >= 2 lcores are needed.
@@ -110,7 +95,7 @@ The output shoud be like this
 ====== ping-pong statistics =====
 tx 200 ping packets
 rx 200 pong packets
-dopped 0 packets
+dropped 0 packets
 min rtt: 50 us
 max rtt: 15808 us
 average rtt: 427 us
