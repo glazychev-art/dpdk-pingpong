@@ -89,7 +89,7 @@ print_port_statistics(void)
     rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "====== ping-pong statistics =====\n");
     rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "tx %" PRIu64 " ping packets\n", port_statistics.tx);
     rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "rx %" PRIu64 " pong packets\n", port_statistics.rx);
-    rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "dopped %" PRIu64 " packets\n", port_statistics.dropped);
+    rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "dropped %" PRIu64 " packets\n", port_statistics.dropped);
 
     min_rtt = 999999999;
     max_rtt = 0;
@@ -103,7 +103,7 @@ print_port_statistics(void)
         if (port_statistics.rtt[i] > max_rtt)
             max_rtt = port_statistics.rtt[i];
     }
-    avg_rtt = sum_rtt / nb_pkts;
+    avg_rtt = sum_rtt / (nb_pkts - port_statistics.dropped);
     rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "min rtt: %" PRIu64 " us\n", min_rtt);
     rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "max rtt: %" PRIu64 " us\n", max_rtt);
     rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "average rtt: %" PRIu64 " us\n", avg_rtt);
@@ -257,8 +257,8 @@ ping_main_loop(void)
     unsigned i, nb_rx, nb_tx;
     const uint64_t tsc_hz = rte_get_tsc_hz();
     uint64_t pkt_idx = 0;
+    struct rte_mbuf *m_send = NULL, *m_recv;
     struct rte_mbuf *pkts_burst[MAX_PKT_BURST];
-    struct rte_mbuf *m = NULL;
     struct rte_ether_hdr *eth_hdr;
     struct rte_vlan_hdr *vlan_hdr;
     uint16_t eth_type;
@@ -269,8 +269,8 @@ ping_main_loop(void)
 
     rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "entering ping loop on lcore %u\n", lcore_id);
 
-    m = contruct_ping_packet();
-    if (m == NULL)
+    m_send = contruct_ping_packet();
+    if (m_send == NULL)
         rte_log(RTE_LOG_ERR, RTE_LOGTYPE_PINGPONG, "construct packet failed\n");
 
     for (pkt_idx = 0; pkt_idx < nb_pkts && !force_quit; pkt_idx++)
@@ -279,12 +279,12 @@ ping_main_loop(void)
 
         ping_tsc = rte_rdtsc();
         /* do ping */
-        nb_tx = rte_eth_tx_burst(portid, 0, &m, 1);
+        nb_tx = rte_eth_tx_burst(portid, 0, &m_send, 1);
         if (nb_tx)
             port_statistics.tx += nb_tx;
 
-        /* wait for pong */
-        while (!pong_received && !force_quit)
+        /* wait for pong for 1 second*/
+        while (!pong_received && !force_quit && rte_rdtsc() - ping_tsc < 1000000000)
         {
             nb_rx = rte_eth_rx_burst(portid, 0, pkts_burst, MAX_PKT_BURST);
             if (!nb_rx)
@@ -297,9 +297,9 @@ ping_main_loop(void)
 
             for (i = 0; i < nb_rx; i++)
             {
-                m = pkts_burst[i];
+                m_recv = pkts_burst[i];
 
-                eth_hdr = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
+                eth_hdr = rte_pktmbuf_mtod(m_recv, struct rte_ether_hdr *);
                 eth_type = rte_cpu_to_be_16(eth_hdr->ether_type);
                 l2_len = sizeof(struct rte_ether_hdr);
                 if (eth_type == RTE_ETHER_TYPE_VLAN)
@@ -325,6 +325,8 @@ ping_main_loop(void)
                 }
             }
         }
+        if (!pong_received)
+            port_statistics.dropped += 1;
     }
     /* print port statistics when ping main loop finishes */
     print_port_statistics();
@@ -342,6 +344,8 @@ pong_main_loop(void)
     struct rte_vlan_hdr *vlan_hdr;
     uint16_t *eth_type_ptr;
     int l2_len;
+    uint64_t pkt_idx = 0;
+    struct rte_ether_addr pong_ether_addr;
 
     lcore_id = rte_lcore_id();
 
@@ -371,15 +375,24 @@ pong_main_loop(void)
                 {
                     port_statistics.rx += 1;
                     /* do pong */
+                    rte_ether_addr_copy(&eth_hdr->s_addr, &pong_ether_addr);
                     rte_ether_addr_copy(&server_ether_addr, &eth_hdr->s_addr);
-                    rte_ether_addr_copy(&client_ether_addr, &eth_hdr->d_addr);
+                    rte_ether_addr_copy(&pong_ether_addr, &eth_hdr->d_addr);
                     *eth_type_ptr = rte_cpu_to_be_16(ETHER_TYPE_PONG);
 
                     nb_tx = rte_eth_tx_burst(portid, 0, &m, 1);
                     if (nb_tx)
                         port_statistics.tx += nb_tx;
+
+                    pkt_idx += 1;
                 }
             }
+        }
+        if (pkt_idx == nb_pkts)
+        {
+            /* print port statistics on n ping packets received */
+            print_port_statistics();
+            pkt_idx = 0;
         }
     }
     /* print port statistics when pong main loop finishes */
@@ -472,10 +485,8 @@ int main(int argc, char **argv)
     {
         ret = rte_eth_dev_default_mac_addr_set(portid, &client_ether_addr);
     }
-
     if (ret < 0)
-        rte_exit(EXIT_FAILURE, "Cannot set device MAC address: err=%d, port=%u\n",
-                 ret, portid);
+        rte_log(RTE_LOG_WARNING, RTE_LOGTYPE_PINGPONG, "Cannot set device MAC address: err=%d, port=%u\n", ret, portid);
 
     ret = rte_eth_dev_configure(portid, 1, 1, &local_port_conf);
     if (ret < 0)
