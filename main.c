@@ -85,28 +85,31 @@ destroy_port_statistics(void)
 static inline void
 print_port_statistics(void)
 {
-    uint64_t i, min_rtt, max_rtt, sum_rtt, avg_rtt;
     rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "====== ping-pong statistics =====\n");
     rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "tx %" PRIu64 " ping packets\n", port_statistics.tx);
     rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "rx %" PRIu64 " pong packets\n", port_statistics.rx);
     rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "dropped %" PRIu64 " packets\n", port_statistics.dropped);
 
-    min_rtt = 999999999;
-    max_rtt = 0;
-    sum_rtt = 0;
-    avg_rtt = 0;
-    for (i = 0; i < nb_pkts; i++)
+    if (nb_pkts - port_statistics.dropped != 0)
     {
-        sum_rtt += port_statistics.rtt[i];
-        if (port_statistics.rtt[i] < min_rtt)
-            min_rtt = port_statistics.rtt[i];
-        if (port_statistics.rtt[i] > max_rtt)
-            max_rtt = port_statistics.rtt[i];
+        uint64_t i, min_rtt, max_rtt, sum_rtt, avg_rtt;
+        min_rtt = 999999999;
+        max_rtt = 0;
+        sum_rtt = 0;
+        avg_rtt = 0;
+        for (i = 0; i < nb_pkts; i++)
+        {
+            sum_rtt += port_statistics.rtt[i];
+            if (port_statistics.rtt[i] < min_rtt)
+                min_rtt = port_statistics.rtt[i];
+            if (port_statistics.rtt[i] > max_rtt)
+                max_rtt = port_statistics.rtt[i];
+        }
+        avg_rtt = sum_rtt / (nb_pkts - port_statistics.dropped);
+        rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "min rtt: %" PRIu64 " us\n", min_rtt);
+        rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "max rtt: %" PRIu64 " us\n", max_rtt);
+        rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "average rtt: %" PRIu64 " us\n", avg_rtt);
     }
-    avg_rtt = sum_rtt / (nb_pkts - port_statistics.dropped);
-    rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "min rtt: %" PRIu64 " us\n", min_rtt);
-    rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "max rtt: %" PRIu64 " us\n", max_rtt);
-    rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "average rtt: %" PRIu64 " us\n", avg_rtt);
     rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PINGPONG, "=================================\n");
 }
 
