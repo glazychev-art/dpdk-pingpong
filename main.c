@@ -1,6 +1,7 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <getopt.h>
+#include <stdio.h>
 
 #include <rte_byteorder.h>
 #include <rte_log.h>
@@ -432,6 +433,9 @@ int main(int argc, char **argv)
     argv += ret;
 
     /* init log */
+    ret = rte_openlog_stream(stdout);
+    if (ret < 0)
+        rte_exit(EXIT_FAILURE, "Cannot set stdout stream \n");
     RTE_LOGTYPE_PINGPONG = rte_log_register(APP);
     ret = rte_log_set_level(RTE_LOGTYPE_PINGPONG, PINGPONG_LOG_LEVEL);
     if (ret < 0)

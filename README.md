@@ -5,11 +5,11 @@ A simple program to evaluate raw DPDK latency.
 The client sends a packet to server as a `ping`, then the server returns it back to client as a `pong`. 
 The client records such ping-pong round trip time.
 
-`Note` that the following steps have been evaluated on 2 Ubuntu 20.04 virtual machines (KVM) with DPDK 20.08. 
+`Note` that the following steps have been evaluated on 2 Ubuntu 20.04 virtual machines (KVM) with DPDK 20.11.6.
 
 ## Prepare
 
-The following operations are tested on Ubuntu 20.04 with DPDK 20.08.
+The following operations are tested on Ubuntu 20.04 with DPDK 20.11.6
 
 ### Setup DPDK
 
